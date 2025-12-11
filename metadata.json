@@ -1,0 +1,9 @@
+{
+  "name": "GuardianAI",
+  "description": "An AI-powered personal safety application for Algeria providing real-time threat analysis, voice-activated emergency reporting, and community safety mapping.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
