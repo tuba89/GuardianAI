@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { AlertTriangle, User, Car, MapPin, StopCircle, RotateCcw, Cloud, RefreshCw, XCircle, Zap, Upload, CheckCircle, FileText, EyeOff } from 'lucide-react';
+import { AlertTriangle, User, Car, MapPin, StopCircle, RotateCcw, Cloud, RefreshCw, XCircle, Zap, Upload, CheckCircle, FileText, EyeOff, Fingerprint, Lock } from 'lucide-react';
 import { analyzeSceneFrame } from '../services/geminiService';
 import { AnalysisResult, EvidenceItem, Language, TriggerType } from '../types';
 import { TEXTS } from '../constants';
@@ -22,10 +22,17 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const locationRef = useRef<{lat: number, lng: number} | null>(null);
 
-  const [isRecording, setIsRecording] = useState(true);
+  // Authentication State for Power Off Interception
+  const [authStep, setAuthStep] = useState<'IDLE' | 'VERIFYING'>('IDLE');
+  const [authTimer, setAuthTimer] = useState<number>(5);
+  const [pinInput, setPinInput] = useState('');
+  const [userPin, setUserPin] = useState<string | null>(null);
+
+  const [isRecording, setIsRecording] = useState(false); // Changed default to false, waits for auth check if needed
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [camFacingMode, setCamFacingMode] = useState<'user' | 'environment'>('environment');
+  // Default to 'user' (Front Camera) as requested for mobile usage
+  const [camFacingMode, setCamFacingMode] = useState<'user' | 'environment'>('user');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
   
@@ -35,12 +42,67 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
   const isAutoTrigger = triggerType !== 'MANUAL' && triggerType !== 'VOICE';
   const effectiveStealth = isAutoTrigger && isStealth;
 
-  // Critical triggers skip the countdown
-  const isCriticalTrigger = ['SIM_EJECT', 'POWER_BUTTON', 'AIRPLANE_MODE'].includes(triggerType);
+  // Critical triggers skip the countdown, but POWER_BUTTON needs auth check first
+  const isCriticalTrigger = ['SIM_EJECT', 'AIRPLANE_MODE'].includes(triggerType);
 
   const [timeLeftToCancel, setTimeLeftToCancel] = useState<number | null>(
-    isAutoTrigger && !isCriticalTrigger && !effectiveStealth ? 5 : null
+    isAutoTrigger && !isCriticalTrigger && !effectiveStealth && triggerType !== 'POWER_BUTTON' ? 5 : null
   );
+
+  // Load PIN from settings
+  useEffect(() => {
+     try {
+         const s = localStorage.getItem('guardian_smart_settings');
+         if (s) {
+             const parsed = JSON.parse(s);
+             if (parsed.vaultPin) setUserPin(parsed.vaultPin);
+         }
+     } catch(e) {}
+  }, []);
+
+  // Initialize Auth Check for Power Button
+  useEffect(() => {
+      if (triggerType === 'POWER_BUTTON') {
+          setAuthStep('VERIFYING');
+          setIsRecording(false);
+          const timer = setInterval(() => {
+              setAuthTimer(prev => {
+                  if (prev <= 1) {
+                      clearInterval(timer);
+                      // Time ran out -> Thief detected -> Start Stealth Recording
+                      setAuthStep('IDLE');
+                      setIsRecording(true);
+                      return 0;
+                  }
+                  return prev - 1;
+              });
+          }, 1000);
+          return () => clearInterval(timer);
+      } else {
+          setIsRecording(true);
+      }
+  }, [triggerType]);
+
+  const handleFingerprintScan = () => {
+      // Simulation of successful biometric scan
+      onExit();
+  };
+
+  const handlePinEntry = (num: string) => {
+      const next = pinInput + num;
+      if (next.length > 4) return;
+      setPinInput(next);
+
+      if (next.length === 4) {
+          if (next === userPin || (!userPin && next === '1234')) { // Default mock if not set
+             onExit();
+          } else {
+             // Wrong PIN -> Immediate Alarm
+             setAuthStep('IDLE');
+             setIsRecording(true);
+          }
+      }
+  };
 
   // Fake upload progress for Demo visualization
   useEffect(() => {
@@ -68,15 +130,14 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
 
   // Start Camera
   useEffect(() => {
+    if (!isRecording) return; // Don't start camera during auth check
+
     let stream: MediaStream | null = null;
     
     const startCamera = async () => {
       try {
-        // In Stealth Mode, prioritize front camera for face capture if user triggered? 
-        // Actually for theft (SIM eject), front camera is better to catch the face.
-        // Let's stick to environment for now or auto-switch? 
-        // For 'SIM_EJECT' or 'UNLOCK_FAILED', front camera makes sense.
-        // For this demo, we'll respect the state but maybe default to user for stealth?
+        // Always prioritize user preference, but force user (front) for specific stealth theft triggers if needed.
+        // Since default is now 'user', this logic mainly ensures we don't accidentally switch to back if set to environment during a theft.
         const facing = effectiveStealth && (triggerType === 'UNLOCK_FAILED' || triggerType === 'SIM_EJECT') ? 'user' : camFacingMode;
         
         stream = await navigator.mediaDevices.getUserMedia({
@@ -103,13 +164,12 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
       if (stream) stream.getTracks().forEach(track => track.stop());
       navigator.geolocation.clearWatch(geoId);
     };
-  }, [camFacingMode, effectiveStealth, triggerType]);
+  }, [camFacingMode, effectiveStealth, triggerType, isRecording]);
 
   const captureFrame = useCallback(async () => {
       if (isAnalyzing || !videoRef.current || !canvasRef.current) return;
       
       const video = videoRef.current;
-      // In stealth mode, video might be hidden but should still be 'ready'
       if (video.readyState !== 4) return; 
 
       setIsAnalyzing(true);
@@ -129,11 +189,9 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
         try {
           const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
           if (base64) {
-            // Pass language for localized analysis
             const result = await analyzeSceneFrame(base64, language);
             setCurrentAnalysis(result);
             
-            // Always save
             const shouldSave = true;
 
             if (shouldSave) {
@@ -151,7 +209,6 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
                    triggerType: triggerType
                });
                setLastSavedId(id);
-               // Hide toast after 3s
                setTimeout(() => setLastSavedId(prev => prev === id ? null : prev), 3000);
             }
           }
@@ -164,10 +221,15 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
 
   useEffect(() => {
     if (!isRecording || timeLeftToCancel !== null) return; 
+    
+    // Initial capture
     captureFrame();
-    const interval = setInterval(captureFrame, 4000); 
+
+    const intervalTime = triggerType === 'POWER_BUTTON' ? 300 : 4000;
+    
+    const interval = setInterval(captureFrame, intervalTime); 
     return () => clearInterval(interval);
-  }, [isRecording, timeLeftToCancel, captureFrame]);
+  }, [isRecording, timeLeftToCancel, captureFrame, triggerType]);
 
   const toggleCamera = () => setCamFacingMode(prev => prev === 'user' ? 'environment' : 'user');
 
@@ -179,6 +241,57 @@ const EmergencyMode: React.FC<EmergencyModeProps> = ({
       default: return 'bg-slate-600';
     }
   };
+
+  // Render Authentication Interception Screen
+  if (authStep === 'VERIFYING') {
+      return (
+          <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-6 text-white animate-in fade-in">
+              <div className="w-full max-w-sm text-center">
+                  <h2 className="text-xl font-bold mb-8">{t.auth.verify_power_off}</h2>
+                  
+                  {/* Fingerprint Simulator */}
+                  <div 
+                    onClick={handleFingerprintScan}
+                    className="w-24 h-24 mx-auto bg-slate-800 rounded-full flex items-center justify-center border-2 border-slate-600 cursor-pointer active:scale-95 active:border-green-500 active:text-green-500 transition-all mb-8 shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:bg-slate-700"
+                  >
+                      <Fingerprint className="w-12 h-12" />
+                  </div>
+                  <p className="text-xs text-slate-500 mb-8 uppercase tracking-widest">{t.auth.touch_id}</p>
+
+                  <div className="flex justify-center gap-4 mb-8">
+                        {[1,2,3,4].map(i => (
+                            <div key={i} className={`w-3 h-3 rounded-full border border-slate-600 ${pinInput.length >= i ? 'bg-white border-white' : 'bg-transparent'}`} />
+                        ))}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                      {[1,2,3,4,5,6,7,8,9].map(n => (
+                          <button 
+                              key={n} 
+                              onClick={() => handlePinEntry(n.toString())}
+                              className="h-16 rounded-full bg-slate-900 border border-slate-700 text-2xl font-medium hover:bg-slate-800"
+                          >
+                              {n}
+                          </button>
+                      ))}
+                      <div />
+                      <button 
+                          onClick={() => handlePinEntry('0')}
+                          className="h-16 rounded-full bg-slate-900 border border-slate-700 text-2xl font-medium hover:bg-slate-800"
+                      >0</button>
+                  </div>
+
+                  {/* Timer Bar */}
+                  <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-red-600 transition-all duration-1000 ease-linear"
+                        style={{ width: `${(authTimer / 5) * 100}%` }} 
+                      />
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   // Stealth Overlay Component
   if (effectiveStealth) {

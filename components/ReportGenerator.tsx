@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
-import { EvidenceItem, Language } from '../types';
+import { EvidenceItem, Language, IncidentClassification } from '../types';
 import { TEXTS } from '../constants';
 import { Download, ChevronLeft, Calendar, MapPin, Cloud, CheckCircle, ExternalLink, RefreshCw, User, Mail, Users, Lock, ShieldAlert, Trash2, Camera, X, Smartphone, Globe } from 'lucide-react';
 
@@ -9,8 +9,6 @@ interface ReportGeneratorProps {
   evidence: EvidenceItem[];
   language: Language;
   onBack: () => void;
-  // In a real app, deleteHandler would be passed down to modify state in App
-  // For this XML structure, we assume read-only/simulated deletion state inside component for demo
 }
 
 const ReportGenerator: React.FC<ReportGeneratorProps> = ({ evidence, language, onBack }) => {
@@ -85,7 +83,15 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ evidence, language, o
       // If we are here, vault is unlocked, so we can delete (simulation)
       if (confirm(t.security.delete_confirm)) {
           alert("Deleted from local device.");
-          // Ideally we would update App state here, but for demo UI we just show the prompt
+      }
+  };
+  
+  const getClassificationColor = (type?: IncidentClassification) => {
+      switch(type) {
+          case 'LOST': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+          case 'UNAUTHORIZED': return 'bg-orange-500/20 text-orange-400 border-orange-500/50';
+          case 'EMERGENCY': return 'bg-red-500/20 text-red-400 border-red-500/50';
+          default: return 'bg-slate-700 text-slate-400 border-slate-600';
       }
   };
 
@@ -172,19 +178,24 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ evidence, language, o
             doc.setFont("helvetica", "bold");
             doc.text(`Incident #${index + 1} • ${item.triggerType}`, leftAlign, currentTextY);
             
-            currentTextY += 8;
+            currentTextY += 7;
             doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
             doc.setTextColor(100);
             doc.text(`${new Date(item.timestamp).toLocaleString()}`, leftAlign, currentTextY);
+            
+            // Classification line
+            currentTextY += 7;
+            doc.setTextColor(0);
+            doc.setFont("helvetica", "bold");
+            doc.text(`Classification: ${item.classification || 'UNAUTHORIZED'}`, leftAlign, currentTextY);
 
-            currentTextY += 8;
+            currentTextY += 7;
             const threat = item.analysis?.threatLevel || 'UNKNOWN';
             doc.setTextColor(threat === 'HIGH' ? 220 : 71, threat === 'HIGH' ? 38 : 85, threat === 'HIGH' ? 38 : 105); // Red if high
-            doc.setFont("helvetica", "bold");
             doc.text(`Threat Level: ${threat}`, leftAlign, currentTextY);
             
-            currentTextY += 8;
+            currentTextY += 7;
             doc.setTextColor(0);
             doc.setFont("helvetica", "normal");
             const locText = doc.splitTextToSize(`Loc: ${item.analysis?.locationContext || 'Unknown'}`, 120);
@@ -371,10 +382,17 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ evidence, language, o
                         </button>
 
                         <div className="flex justify-between items-start mb-2 pr-10">
-                             <div className="flex items-center gap-2 text-slate-400 text-sm">
-                                <Calendar className="w-4 h-4" />
-                                {new Date(item.timestamp).toLocaleString()}
-                            </div>
+                             <div className="flex flex-col">
+                                 <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                    <Calendar className="w-4 h-4" />
+                                    {new Date(item.timestamp).toLocaleString()}
+                                </div>
+                                {item.classification && (
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-block mt-2 w-max ${getClassificationColor(item.classification)}`}>
+                                        {item.classification}
+                                    </span>
+                                )}
+                             </div>
                         </div>
 
                         <div className="flex items-center gap-2 mb-2">
@@ -401,53 +419,127 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ evidence, language, o
         )}
       </div>
       
-      {/* Cloud Portal Modal */}
+      {/* Cloud Portal Modal - REDESIGNED */}
       {showPortal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-slate-900 border border-blue-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
-                <button 
-                    onClick={() => setShowPortal(false)}
-                    className="absolute top-4 right-4 p-1 bg-slate-800 rounded-full hover:bg-slate-700"
-                >
-                    <X className="w-5 h-5 text-slate-400" />
-                </button>
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto ring-1 ring-white/10">
                 
-                <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mb-4 border border-blue-500/50">
+                {/* Header */}
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-blue-600/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30 shadow-[0_0_15px_rgba(37,99,235,0.2)]">
                         <Globe className="w-8 h-8 text-blue-400" />
                     </div>
-                    
-                    <h3 className="text-xl font-bold text-white mb-2">Web Portal Access</h3>
-                    <p className="text-slate-400 text-sm mb-6">
-                        Access your evidence vault from any device using your credentials.
-                    </p>
-                    
-                    <div className="bg-white p-2 rounded-xl mb-4 shadow-lg">
-                         {/* QR Code Placeholder using a public API or you could use a library. 
-                             Using a public API for demo purposes to generate a real-looking QR */}
-                         <img 
-                            src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://guardianai-demo.web.app" 
-                            alt="Scan to open portal" 
-                            className="w-32 h-32"
-                         />
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-                        <Smartphone className="w-3 h-3" />
-                        <span>Scan to view on another device</span>
-                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-1">Access Your Evidence Vault</h3>
+                    <p className="text-slate-400 text-sm font-medium">If your phone is lost or stolen</p>
+                </div>
 
-                    <div className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 mb-4 text-left">
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Authenticated User</div>
-                        <div className="text-sm font-mono text-white flex items-center gap-2">
-                             <User className="w-3 h-3 text-blue-400" /> {userEmail}
+                <div className="space-y-4">
+                    {/* Email Method (Primary) */}
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700/80 relative overflow-hidden group hover:border-blue-500/30 transition-colors">
+                        <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold px-2 py-1 rounded-bl-lg uppercase tracking-wider">Recommended</div>
+                        <div className="flex items-start gap-4">
+                            <div className="p-2.5 bg-blue-500/10 rounded-lg text-blue-400 mt-1 group-hover:bg-blue-500/20 transition-colors">
+                                <Mail className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-white text-sm mb-1">Email Magic Link</h4>
+                                <div className="text-xs text-slate-300 mb-2">
+                                    Check your email: <br/>
+                                    <span className="text-blue-300 font-mono bg-blue-900/30 px-1 rounded">{userEmail}</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                                        <span>Click "View Evidence" for instant access</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                                        <span>No password needed • Secure one-time link</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                                        <span>Expires in 1 hour for security</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    
+
+                    {/* Web Portal Method */}
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700/80 hover:border-purple-500/30 transition-colors">
+                        <div className="flex items-start gap-4">
+                            <div className="p-2.5 bg-purple-500/10 rounded-lg text-purple-400 mt-1">
+                                <Globe className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-white text-sm mb-1">Web Portal Login</h4>
+                                <div className="text-xs text-slate-300 mb-2">
+                                    Visit: <span className="text-purple-300 font-mono">vault.guardianai.app</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-purple-500"></div>
+                                        <span>Answer security questions to verify identity</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-purple-500"></div>
+                                        <span>Download reports & track location</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                        <div className="w-1 h-1 rounded-full bg-purple-500"></div>
+                                        <span className="font-semibold text-slate-300">No phone required</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Emergency Contacts */}
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700/80 hover:border-green-500/30 transition-colors">
+                        <div className="flex items-start gap-4">
+                            <div className="p-2.5 bg-green-500/10 rounded-lg text-green-400 mt-1">
+                                <Users className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-white text-sm mb-1">Emergency Contact Access</h4>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    Your family receives the same secure links to take immediate action and contact authorities on your behalf.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Security Footer */}
+                <div className="mt-6 pt-4 border-t border-slate-700/50">
+                    <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Security Features
+                    </h5>
+                    <div className="grid grid-cols-2 gap-y-1 gap-x-2">
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <CheckCircle className="w-3 h-3 text-slate-600" /> Evidence immutable remotely
+                         </div>
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <CheckCircle className="w-3 h-3 text-slate-600" /> Access attempts logged
+                         </div>
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <CheckCircle className="w-3 h-3 text-slate-600" /> Suspicious login alerts
+                         </div>
+                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <CheckCircle className="w-3 h-3 text-slate-600" /> Cloud backup enabled
+                         </div>
+                    </div>
+                </div>
+
+                <div className="mt-6 text-center">
+                    <p className="text-[9px] text-slate-600 italic mb-4">
+                        This is a concept demonstration. Full web portal requires backend infrastructure.
+                    </p>
                     <button
-                        onClick={() => window.open('https://guardianai-demo.web.app', '_blank')}
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
+                        onClick={() => setShowPortal(false)}
+                        className="w-full py-3.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold transition-all active:scale-95 border border-slate-600"
                     >
-                        <ExternalLink className="w-4 h-4" /> Launch Portal
+                        Close
                     </button>
                 </div>
             </div>

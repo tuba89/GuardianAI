@@ -1,15 +1,16 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Shield, Radio, FileText, Globe, Cloud, ExternalLink, Settings, Zap } from 'lucide-react';
+import { Shield, Radio, FileText, Globe, Cloud, ExternalLink, Settings, Zap, Smartphone, Mic, CheckCircle, Trash2 } from 'lucide-react';
 import EmergencyMode from './components/EmergencyMode';
 import ReportGenerator from './components/ReportGenerator';
 import CommunityMap from './components/CommunityMap';
 import IncidentSummary from './components/IncidentSummary';
 import SmartSettingsView from './components/SmartSettings.tsx';
 import Onboarding from './components/Onboarding';
+import GuardianLogo from './components/GuardianLogo';
 import { uploadToCloud, broadcastToCommunity } from './services/cloudService';
 import { TEXTS, MOCK_INCIDENTS, VOICE_TRIGGERS } from './constants';
-import { AppView, EvidenceItem, Language, IncidentMarker, TriggerType, SmartSettings } from './types';
+import { AppView, EvidenceItem, Language, IncidentMarker, TriggerType, SmartSettings, IncidentClassification } from './types';
 
 // Speech Recognition type definition shim
 declare global {
@@ -20,9 +21,13 @@ declare global {
 }
 
 const App: React.FC = () => {
+  const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<AppView>(AppView.ONBOARDING);
   const [language, setLanguage] = useState<Language>('EN');
   
+  // Toast State
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
+
   // Initialize evidence from Local Storage
   const [evidence, setEvidence] = useState<EvidenceItem[]>(() => {
     if (typeof window !== 'undefined') {
@@ -66,6 +71,20 @@ const App: React.FC = () => {
 
   const t = TEXTS[language];
   const isRTL = language === 'AR';
+
+  // Show Toast Helper
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+      setToast({ message, type });
+      setTimeout(() => setToast(null), 3000);
+  };
+
+  // Splash Screen Timer
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load basic settings from local storage
   useEffect(() => {
@@ -128,7 +147,7 @@ const App: React.FC = () => {
 
   // Voice Activation
   useEffect(() => {
-    if (view === AppView.ONBOARDING) return;
+    if (view === AppView.ONBOARDING || showSplash) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
@@ -145,6 +164,7 @@ const App: React.FC = () => {
           // Check against language specific triggers
           const triggers = VOICE_TRIGGERS[language];
           if (triggers.some(trigger => transcript.includes(trigger))) {
+            console.log("Voice trigger detected:", transcript);
             setTriggerSource('VOICE');
             setView(AppView.EMERGENCY);
           }
@@ -162,7 +182,7 @@ const App: React.FC = () => {
     }
 
     return () => { try { recognitionRef.current.stop(); } catch(e) {} };
-  }, [isListening, language, view]);
+  }, [isListening, language, view, showSplash]);
 
   // Movement Detection (Shake)
   useEffect(() => {
@@ -198,11 +218,16 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleClassifyEvidence = useCallback((id: string, type: IncidentClassification) => {
+      setEvidence(prev => prev.map(e => e.id === id ? { ...e, classification: type } : e));
+  }, []);
+
   const handleClearEvidence = useCallback(() => {
     setEvidence([]);
     setIncidents(MOCK_INCIDENTS); // Reset community map to defaults
     localStorage.removeItem('guardianai_evidence');
     console.log("[App] Evidence vault cleared.");
+    showToast("Evidence Vault Cleared", "success");
   }, []);
 
   const handleCommunityShare = async (id: string) => {
@@ -227,161 +252,253 @@ const App: React.FC = () => {
      }
   };
 
+  const toggleLanguage = () => {
+       setLanguage(l => l === 'EN' ? 'FR' : (l === 'FR' ? 'AR' : 'EN'));
+  };
+
   const renderDashboard = () => (
-    <div className={`min-h-screen pb-24 ${isRTL ? 'font-arabic' : ''} bg-slate-900 text-white`}>
-      {/* Header */}
-      <header className="p-6 flex justify-between items-center bg-slate-900 border-b border-slate-800 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <Shield className="w-8 h-8 text-red-500" />
-          <h1 className="text-2xl font-bold tracking-tight">{t.app_name}</h1>
-        </div>
-        <div className="flex gap-2">
+    <div className={`flex-1 flex flex-col p-5 max-w-md mx-auto w-full ${isRTL ? 'font-arabic' : ''}`}>
+      
+      {/* PROFESSIONAL HEADER */}
+      <header className="flex justify-between items-center bg-transparent mb-4">
+        <div className="flex-1"></div> {/* Spacer */}
+        <div className="flex gap-3">
              <button 
-                onClick={() => {
-                   setLanguage(l => l === 'EN' ? 'FR' : (l === 'FR' ? 'AR' : 'EN'));
-                }}
-                className="p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700 font-bold w-10 h-10 flex items-center justify-center text-xs"
+                onClick={toggleLanguage}
+                className="p-2 rounded-xl bg-slate-800/80 backdrop-blur text-slate-400 hover:text-white hover:bg-slate-700 border border-slate-700 font-bold w-10 h-10 flex items-center justify-center text-[10px] transition-all"
             >
                 {language}
-            </button>
-            <button
-                onClick={() => setView(AppView.SETTINGS)}
-                className="p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700"
-            >
-                <Settings className="w-5 h-5" />
             </button>
         </div>
       </header>
 
-      <main className="p-4 space-y-6 max-w-md mx-auto">
-        
-        {/* Persistent Voice Reminder */}
-        {isListening && (
-            <div className="bg-slate-800/50 rounded-lg p-2 text-center border border-slate-700/50">
-                <p className="text-xs text-slate-500">
-                    Say <span className="font-bold text-red-400">"{VOICE_TRIGGERS[language][0]}"</span> for help
-                </p>
-            </div>
-        )}
+      {/* CENTERED BRANDING SECTION - LARGER & GLOWING */}
+      <div className="flex flex-col items-center justify-center pt-6 pb-8 animate-in fade-in zoom-in duration-700">
+             {/* Logo - Increased to 96px (w-24 h-24) */}
+             <div className="w-24 h-24 mb-6 drop-shadow-[0_0_35px_rgba(59,130,246,0.4)]">
+                 <GuardianLogo variant="icon" animated />
+             </div>
+             
+             {/* Title */}
+             <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-white text-center leading-tight drop-shadow-sm mb-3">
+                 Guardian<span className="text-blue-500">AI</span>
+             </h1>
+             
+             {/* Tagline */}
+             <p className="text-xs md:text-sm text-slate-400 font-bold uppercase tracking-[0.25em] text-center opacity-70">
+                 Global Safety Network
+             </p>
+             
+             {/* Voice Hint Badge */}
+             {isListening && (
+                 <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-700 delay-300">
+                     <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm shadow-lg hover:bg-white/10 transition-colors cursor-default">
+                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                        <span className="text-[11px] text-slate-300 font-medium tracking-wide">
+                            Say <span className="text-white font-bold px-0.5">"Help"</span> for instant protection
+                        </span>
+                     </div>
+                 </div>
+             )}
+        </div>
+
+        {/* SOS Button */}
+        <div className="py-2 mb-6">
+            <button 
+              onClick={() => { setTriggerSource('MANUAL'); setView(AppView.EMERGENCY); }}
+              className="w-full aspect-square max-w-[260px] mx-auto rounded-full bg-gradient-to-br from-red-600 to-red-900 shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center justify-center transform active:scale-95 transition-all duration-200 border-8 border-slate-800 relative group overflow-hidden"
+            >
+               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
+               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+               <div className="relative z-10 flex flex-col items-center">
+                   <Shield className="w-24 h-24 text-white mb-3 animate-pulse drop-shadow-xl" strokeWidth={1.5} />
+                   <span className="text-5xl font-black text-white tracking-widest drop-shadow-md">{t.sos}</span>
+                   <span className="text-red-200 text-sm mt-2 opacity-90 font-bold tracking-wider uppercase bg-red-950/30 px-3 py-1 rounded-full">{t.start_monitoring}</span>
+               </div>
+            </button>
+        </div>
 
         {/* Status Indicators */}
-        <div className="grid grid-cols-2 gap-3">
-             <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 flex flex-col justify-center">
+        <div className="grid grid-cols-2 gap-4 mb-4">
+             <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col justify-center shadow-md">
                 <div className="flex items-center gap-2 mb-1">
                     <Cloud className={`w-4 h-4 ${pendingUploads > 0 ? 'text-blue-400 animate-pulse' : 'text-green-500'}`} />
-                    <span className="text-xs text-slate-400">{t.cloud_backup}</span>
+                    <span className="text-xs text-slate-400 font-medium">{t.cloud_backup}</span>
                 </div>
-                <span className="text-sm font-semibold text-white">
+                <span className="text-sm font-bold text-white tracking-wide">
                     {pendingUploads > 0 ? t.uploading : t.secured}
                 </span>
             </div>
             
-             <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 flex flex-col justify-center" onClick={() => setView(AppView.SETTINGS)}>
+             <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col justify-center shadow-md active:bg-slate-700 cursor-pointer transition-colors" onClick={() => setView(AppView.SETTINGS)}>
                 <div className="flex items-center gap-2 mb-1">
                     <Zap className="w-4 h-4 text-yellow-500" />
-                    <span className="text-xs text-slate-400">{t.settings}</span>
+                    <span className="text-xs text-slate-400 font-medium">{t.settings}</span>
                 </div>
-                <span className="text-sm font-semibold text-white">
+                <span className="text-sm font-bold text-white tracking-wide">
                     {smartSettings.contacts.length > 0 ? `${smartSettings.contacts.length} Contacts` : 'Setup Needed'}
                 </span>
             </div>
         </div>
 
-        {/* SOS Button */}
-        <button 
-          onClick={() => { setTriggerSource('MANUAL'); setView(AppView.EMERGENCY); }}
-          className="w-full aspect-square rounded-full bg-gradient-to-br from-red-600 to-red-800 shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center justify-center transform active:scale-95 transition-all duration-200 border-8 border-slate-800 relative group overflow-hidden"
-        >
-           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
-           <Shield className="w-20 h-20 text-white mb-2 animate-pulse" />
-           <span className="text-4xl font-black text-white tracking-widest">{t.sos}</span>
-           <span className="text-red-200 text-sm mt-2 opacity-80">{t.start_monitoring}</span>
-        </button>
-
         {/* Voice Toggle */}
         <div 
             onClick={() => setIsListening(!isListening)}
-            className={`p-4 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${isListening ? 'bg-red-900/20 border-red-500/50' : 'bg-slate-800 border-slate-700'}`}
+            className={`p-5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all shadow-lg mb-4 ${isListening ? 'bg-slate-800/80 border-red-500/20 shadow-red-900/10' : 'bg-slate-800 border-slate-700 hover:bg-slate-750'}`}
         >
-            <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-slate-700'}`}>
-                    <Radio className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-full ${isListening ? 'bg-red-500/10 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-slate-700 text-slate-400'}`}>
+                    <Mic className="w-6 h-6" />
                 </div>
                 <div>
-                    <h3 className="font-semibold text-white">Voice Guard</h3>
-                    <p className="text-xs text-slate-400">{isListening ? 'Active' : 'Inactive'}</p>
+                    <h3 className="font-bold text-white text-lg">Voice Guard</h3>
+                    <p className="text-xs text-slate-400 font-medium tracking-wide">{isListening ? 'Microphone Active' : 'Microphone Paused'}</p>
                 </div>
             </div>
-            <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-green-500' : 'bg-slate-600'}`} />
+            <div className={`w-3 h-3 rounded-full transition-colors ${isListening ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]' : 'bg-slate-600'}`} />
         </div>
 
         {/* Map Section */}
-        <div className="space-y-2">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Globe className="w-5 h-5 text-blue-400" />
+        <div className="space-y-3 pt-2">
+            <h2 className="text-lg font-bold flex items-center gap-2 text-slate-200">
+                <Globe className="w-5 h-5 text-blue-500" />
                 {t.community_map}
             </h2>
             <CommunityMap incidents={incidents} />
         </div>
-
-      </main>
-
-      {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800 p-4 flex justify-around z-20">
-        <button onClick={() => setView(AppView.DASHBOARD)} className={`flex flex-col items-center gap-1 ${view === AppView.DASHBOARD ? 'text-red-500' : 'text-slate-500'}`}>
-            <Shield className="w-6 h-6" />
-            <span className="text-xs font-medium">{t.dashboard}</span>
-        </button>
-        <button onClick={() => setView(AppView.REPORT)} className={`flex flex-col items-center gap-1 ${view === AppView.REPORT ? 'text-red-500' : 'text-slate-500'}`}>
-            <FileText className="w-6 h-6" />
-            <span className="text-xs font-medium">{t.history}</span>
-        </button>
-      </nav>
     </div>
   );
 
+  // Splash Screen Render
+  if (showSplash) {
+      return (
+          <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col items-center justify-center animate-out fade-out duration-500">
+              <div className="animate-in zoom-in duration-700 flex flex-col items-center">
+                  <div className="w-64 h-64 mb-6">
+                      <GuardianLogo variant="full" animated />
+                  </div>
+                  <div className="mt-16 opacity-0 animate-in fade-in slide-in-from-bottom-4 delay-500 duration-700">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-[0.2em] text-center font-bold mb-3">Powered By</p>
+                      <div className="flex items-center gap-3 bg-slate-800 px-6 py-3 rounded-full border border-slate-700 shadow-xl">
+                          <Zap className="w-5 h-5 text-purple-400 fill-current" />
+                          <span className="text-xl font-bold text-white tracking-tight">Gemini 3</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
   return (
-    <div dir={isRTL ? 'rtl' : 'ltr'}>
-      {view === AppView.ONBOARDING && (
-        <Onboarding onComplete={handleOnboardingComplete} />
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-slate-900 text-white ${isRTL ? 'font-arabic' : ''}`}>
+      
+      {/* Toast Notification */}
+      {toast && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
+              <div className={`flex items-center gap-2 px-5 py-3 rounded-full shadow-2xl border ${
+                  toast.type === 'success' ? 'bg-green-900/90 border-green-500/50 text-green-100' : 
+                  toast.type === 'error' ? 'bg-red-900/90 border-red-500/50 text-red-100' : 
+                  'bg-slate-800/90 border-slate-600 text-white'
+              }`}>
+                  {toast.type === 'success' && <CheckCircle className="w-4 h-4" />}
+                  {toast.type === 'error' && <Shield className="w-4 h-4" />}
+                  <span className="text-sm font-bold">{toast.message}</span>
+              </div>
+          </div>
       )}
-      {view === AppView.EMERGENCY && (
-        <EmergencyMode 
-            language={language}
-            triggerType={triggerSource}
-            onExit={() => setView(AppView.SUMMARY)} 
-            onEvidenceCaptured={handleEvidenceCaptured}
-            pendingUploads={pendingUploads}
-            isStealth={smartSettings.stealthMode}
-            isDemo={smartSettings.demoMode}
-        />
+
+      {/* Content Rendering */}
+      <div className="pb-24">
+          {view === AppView.ONBOARDING && (
+            <Onboarding onComplete={handleOnboardingComplete} />
+          )}
+          {view === AppView.EMERGENCY && (
+            <EmergencyMode 
+                language={language}
+                triggerType={triggerSource}
+                onExit={() => setView(AppView.SUMMARY)} 
+                onEvidenceCaptured={handleEvidenceCaptured}
+                pendingUploads={pendingUploads}
+                isStealth={smartSettings.stealthMode}
+                isDemo={smartSettings.demoMode}
+            />
+          )}
+          {view === AppView.SUMMARY && (
+            <IncidentSummary 
+                language={language}
+                evidence={evidence}
+                onShare={handleCommunityShare}
+                onClassify={handleClassifyEvidence}
+                onClose={() => setView(AppView.DASHBOARD)}
+            />
+          )}
+          {view === AppView.REPORT && (
+            <>
+               {/* Custom header for Report view to include language toggle */}
+               <div className="fixed top-0 right-0 p-4 z-20">
+                   <button 
+                        onClick={toggleLanguage}
+                        className="p-2 rounded-xl bg-slate-800/80 backdrop-blur text-slate-400 hover:text-white border border-slate-700 font-bold w-10 h-10 flex items-center justify-center text-[10px]"
+                    >
+                        {language}
+                    </button>
+               </div>
+               <ReportGenerator 
+                    language={language}
+                    evidence={evidence} 
+                    onBack={() => setView(AppView.DASHBOARD)} 
+                />
+            </>
+          )}
+          {view === AppView.SETTINGS && (
+            <>
+                <div className="fixed top-0 right-0 p-4 z-20">
+                   <button 
+                        onClick={toggleLanguage}
+                        className="p-2 rounded-xl bg-slate-800/80 backdrop-blur text-slate-400 hover:text-white border border-slate-700 font-bold w-10 h-10 flex items-center justify-center text-[10px]"
+                    >
+                        {language}
+                    </button>
+               </div>
+                <SmartSettingsView 
+                    language={language}
+                    settings={smartSettings}
+                    onUpdateSettings={setSmartSettings}
+                    onSimulateTrigger={handleTrigger}
+                    onBack={() => setView(AppView.DASHBOARD)}
+                    onClearEvidence={handleClearEvidence}
+                />
+            </>
+          )}
+          {view === AppView.DASHBOARD && renderDashboard()}
+      </div>
+
+      {/* Persistent Bottom Navigation - Visible on Main Screens */}
+      {(view === AppView.DASHBOARD || view === AppView.REPORT || view === AppView.SETTINGS) && (
+          <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around z-30 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,0.3)]">
+            <button 
+                onClick={() => setView(AppView.DASHBOARD)} 
+                className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors ${view === AppView.DASHBOARD ? 'text-red-500 bg-red-500/10' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+                <Shield className="w-6 h-6" />
+                <span className="text-[10px] font-bold tracking-wide uppercase">{t.dashboard}</span>
+            </button>
+            <button 
+                onClick={() => setView(AppView.REPORT)} 
+                className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors ${view === AppView.REPORT ? 'text-red-500 bg-red-500/10' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+                <FileText className="w-6 h-6" />
+                <span className="text-[10px] font-bold tracking-wide uppercase">{t.history}</span>
+            </button>
+            <button 
+                onClick={() => setView(AppView.SETTINGS)} 
+                className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors ${view === AppView.SETTINGS ? 'text-red-500 bg-red-500/10' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+                <Settings className="w-6 h-6" />
+                <span className="text-[10px] font-bold tracking-wide uppercase">{t.settings}</span>
+            </button>
+          </nav>
       )}
-      {view === AppView.SUMMARY && (
-        <IncidentSummary 
-            language={language}
-            evidence={evidence}
-            onShare={handleCommunityShare}
-            onClose={() => setView(AppView.DASHBOARD)}
-        />
-      )}
-      {view === AppView.REPORT && (
-        <ReportGenerator 
-            language={language}
-            evidence={evidence} 
-            onBack={() => setView(AppView.DASHBOARD)} 
-        />
-      )}
-      {view === AppView.SETTINGS && (
-        <SmartSettingsView 
-            language={language}
-            settings={smartSettings}
-            onUpdateSettings={setSmartSettings}
-            onSimulateTrigger={handleTrigger}
-            onBack={() => setView(AppView.DASHBOARD)}
-            onClearEvidence={handleClearEvidence}
-        />
-      )}
-      {view === AppView.DASHBOARD && renderDashboard()}
     </div>
   );
 };

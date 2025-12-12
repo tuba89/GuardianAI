@@ -2,9 +2,9 @@
 import { Language, IncidentMarker } from './types';
 
 export const VOICE_TRIGGERS = {
-  EN: ['help', 'emergency', 'sos', 'guardian'],
-  FR: ['aide', 'secours', 'urgence', 'guardian'],
-  AR: ['نجدة', 'مساعدة', 'طوارئ', 'عون']
+  EN: ['help', 'sos', 'emergency', 'guardian'],
+  FR: ['aide', 'au secours', 'urgence', 'sos', 'secours'],
+  AR: ['نجدة', 'مساعدة', 'طوارئ', 'sos', 'النجدة']
 };
 
 export const TEXTS = {
@@ -54,17 +54,36 @@ export const TEXTS = {
         unlock: "Failed Access",
         geofence: "Zone Exit"
     },
+    trigger_descriptions: {
+        power: "Hold power button 3s when locked to burst capture 10 photos & critical upload.",
+        airplane: "Detects signal cut-off.",
+        sim: "Detects SIM card removal.",
+        movement: "Detects snatching/running.",
+        unlock: "3 failed PIN attempts.",
+        geofence: "Leaving safe zone."
+    },
     simulation: "Test Trigger",
     onboarding: {
       welcome: "Welcome to GuardianAI",
       select_lang: "Choose your language",
       voice_setup: "Voice Activation Setup",
-      say_phrase: "Say the magic phrase:",
+      say_phrase: "Say your emergency phrase:",
       listening: "Listening...",
-      success: "Voice recognized.",
+      success: "Voice recognized!",
       skip: "Skip for now",
-      finish: "Start Protection",
-      practice: "Practice"
+      finish: "Continue to App",
+      practice: "Practice",
+      permissions_title: "Required Permissions",
+      permissions_desc: "To function in emergencies, GuardianAI needs permanent access to your Camera and Microphone. We only record when an incident is triggered.",
+      grant: "Grant Access",
+      granted: "Access Granted"
+    },
+    auth: {
+        verify_power_off: "Verify Identity to Power Off",
+        touch_id: "Touch Sensor",
+        enter_pin: "Enter PIN",
+        wrong_pin: "Incorrect PIN",
+        authenticating: "Verifying..."
     },
     demo_mode: "Demo Mode",
     install_app: "Install App",
@@ -147,17 +166,36 @@ export const TEXTS = {
         unlock: "Accès Échoué",
         geofence: "Sortie Zone"
     },
+    trigger_descriptions: {
+        power: "Maintenir power 3s verrouillé pour capturer 10 photos & upload critique.",
+        airplane: "Détecte coupure signal.",
+        sim: "Détecte retrait SIM.",
+        movement: "Détecte course/arrachage.",
+        unlock: "3 échecs PIN.",
+        geofence: "Sortie zone sûre."
+    },
     simulation: "Test",
     onboarding: {
       welcome: "Bienvenue sur GuardianAI",
       select_lang: "Choisissez votre langue",
       voice_setup: "Configuration Vocale",
-      say_phrase: "Dites la phrase magique :",
+      say_phrase: "Dites votre phrase d'urgence:",
       listening: "Écoute en cours...",
-      success: "Voix reconnue.",
+      success: "Voix reconnue !",
       skip: "Passer",
-      finish: "Démarrer",
-      practice: "S'entraîner"
+      finish: "Continuer vers l'app",
+      practice: "S'entraîner",
+      permissions_title: "Permissions Requises",
+      permissions_desc: "Pour fonctionner en cas d'urgence, GuardianAI a besoin d'un accès permanent à votre caméra et microphone.",
+      grant: "Autoriser l'accès",
+      granted: "Accès Autorisé"
+    },
+    auth: {
+        verify_power_off: "Vérifier identité pour éteindre",
+        touch_id: "Capteur Tactile",
+        enter_pin: "Code PIN",
+        wrong_pin: "Code Incorrect",
+        authenticating: "Vérification..."
     },
     demo_mode: "Mode Démo",
     install_app: "Installer l'app",
@@ -240,17 +278,36 @@ export const TEXTS = {
         unlock: "فشل الدخول",
         geofence: "مغادرة المنطقة"
     },
+    trigger_descriptions: {
+        power: "اضغط زر التشغيل 3 ثوان لالتقاط 10 صور فورية والرفع للسحابة.",
+        airplane: "كشف قطع الاتصال.",
+        sim: "كشف إخراج الشريحة.",
+        movement: "كشف الخطف والجري.",
+        unlock: "3 محاولات دخول خاطئة.",
+        geofence: "مغادرة المنطقة الآمنة."
+    },
     simulation: "تجربة",
     onboarding: {
       welcome: "مرحباً بك في GuardianAI",
       select_lang: "اختر لغتك",
       voice_setup: "إعداد التفعيل الصوتي",
-      say_phrase: "قل العبارة السحرية:",
+      say_phrase: "قل عبارة الطوارئ:",
       listening: "جاري الاستماع...",
-      success: "تم التعرف على الصوت.",
+      success: "تم التعرف على الصوت!",
       skip: "تخطي",
-      finish: "بدء الحماية",
-      practice: "تدريب"
+      finish: "المتابعة للتطبيق",
+      practice: "تدريب",
+      permissions_title: "الأذونات المطلوبة",
+      permissions_desc: "للحصول على الحماية الكاملة، يحتاج التطبيق إلى إذن الوصول للكاميرا والميكروفون بشكل دائم.",
+      grant: "منح الأذونات",
+      granted: "تم المنح"
+    },
+    auth: {
+        verify_power_off: "تحقق من الهوية لإيقاف التشغيل",
+        touch_id: "بصمة الإصبع",
+        enter_pin: "أدخل الرمز",
+        wrong_pin: "رمز خاطئ",
+        authenticating: "جاري التحقق..."
     },
     demo_mode: "وضع العرض",
     install_app: "تثبيت التطبيق",
